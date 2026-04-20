@@ -1,0 +1,113 @@
+/**
+ * FormsBuilderForm — simple display-only contact form.
+ *
+ * Server-rendered with no client-side JavaScript.
+ * Drop this component into any Astro page via the shortcode from the admin.
+ *
+ * Submission handling is intentionally omitted in this release.
+ * The form renders with `action="#"` and no JS submit handler so it is
+ * purely decorative/structural — safe to use while the feature is in progress.
+ */
+---
+
+<form
+	class="emdash-form"
+	action="#"
+	method="post"
+	novalidate
+	aria-label="Contact form"
+>
+	<div class="emdash-form__group">
+		<label for="efb-name" class="emdash-form__label">Name</label>
+		<input
+			id="efb-name"
+			name="name"
+			type="text"
+			class="emdash-form__input"
+			placeholder="Your name"
+			autocomplete="name"
+		/>
+	</div>
+
+	<div class="emdash-form__group">
+		<label for="efb-email" class="emdash-form__label">Email</label>
+		<input
+			id="efb-email"
+			name="email"
+			type="email"
+			class="emdash-form__input"
+			placeholder="you@example.com"
+			autocomplete="email"
+		/>
+	</div>
+
+	<div class="emdash-form__group">
+		<label for="efb-message" class="emdash-form__label">Message</label>
+		<textarea
+			id="efb-message"
+			name="message"
+			class="emdash-form__input emdash-form__textarea"
+			placeholder="Your message…"
+			rows="5"
+		></textarea>
+	</div>
+
+	<button type="submit" class="emdash-form__submit" disabled>
+		Send message
+	</button>
+</form>
+
+<style>
+	.emdash-form {
+		display: flex;
+		flex-direction: column;
+		gap: 1.25rem;
+		max-width: 32rem;
+		font-family: inherit;
+	}
+
+	.emdash-form__group {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+	}
+
+	.emdash-form__label {
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: currentColor;
+	}
+
+	.emdash-form__input {
+		padding: 0.5rem 0.75rem;
+		border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+		border-radius: 0.375rem;
+		font-size: 0.875rem;
+		line-height: 1.5;
+		width: 100%;
+		background: transparent;
+		color: inherit;
+	}
+
+	.emdash-form__input:focus {
+		outline: 2px solid currentColor;
+		outline-offset: 2px;
+	}
+
+	.emdash-form__textarea {
+		resize: vertical;
+	}
+
+	.emdash-form__submit {
+		align-self: flex-start;
+		padding: 0.5rem 1.25rem;
+		border-radius: 0.375rem;
+		font-size: 0.875rem;
+		font-weight: 500;
+		cursor: not-allowed;
+		opacity: 0.5;
+		border: 1px solid currentColor;
+		background: transparent;
+		color: inherit;
+	}
+</style>

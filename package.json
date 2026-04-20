@@ -1,0 +1,64 @@
+{
+	"name": "@emdash-cms/plugin-forms-builder",
+	"version": "0.1.0",
+	"description": "EmForm Builder plugin for EmDash CMS - build forms and embed them in your site",
+	"type": "module",
+	"main": "dist/index.mjs",
+	"types": "dist/index.d.mts",
+	"exports": {
+		".": {
+			"import": "./dist/index.mjs",
+			"types": "./dist/index.d.mts"
+		},
+		"./admin": "./src/admin.tsx",
+		"./astro": "./src/astro/index.ts",
+		"./astro/portal-page": "./src/astro/PortalPage.astro"
+	},
+	"files": [
+		"dist",
+		"src",
+		"README.md"
+	],
+	"keywords": [
+		"emdash",
+		"cms",
+		"plugin",
+		"forms",
+		"builder",
+		"embed"
+	],
+	"author": "",
+	"license": "MIT",
+	"peerDependencies": {
+		"@lingui/core": ">=5.0.0",
+		"@lingui/react": ">=5.0.0",
+		"astro": ">=6.0.0-beta.0",
+		"emdash": ">=0.1.1",
+		"react": "^18.0.0 || ^19.0.0",
+		"@phosphor-icons/react": "^2.1.10"
+	},
+	"dependencies": {
+		"ulidx": "^2.3.0",
+		"zod": "^4.3.5"
+	},
+	"devDependencies": {
+		"@babel/core": "^7.29.0",
+		"@lingui/babel-plugin-lingui-macro": "catalog:",
+		"@lingui/core": "catalog:",
+		"@lingui/react": "catalog:",
+		"babel-plugin-macros": "^3.1.0",
+		"tsdown": "catalog:",
+		"typescript": "catalog:"
+	},
+	"scripts": {
+		"build": "tsdown src/index.ts --format esm --dts --clean",
+		"dev": "tsdown src/index.ts --format esm --dts --watch",
+		"prepublishOnly": "pnpm build",
+		"typecheck": "tsgo --noEmit"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/emdash-cms/emdash.git",
+		"directory": "packages/plugins/forms-builder"
+	}
+}

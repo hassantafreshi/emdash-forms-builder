@@ -1,0 +1,1454 @@
+---
+/**
+ * FormEmbed — Portable Text block component for embedding forms.
+ *
+ * Fetches the saved form definition from the plugin API and renders
+ * all fields server-side. Submissions POST to the forms.submit route.
+ */
+
+interface Props {
+	node: { formId: string };
+}
+
+const { node } = Astro.props;
+const formId = node.formId;
+
+if (!formId) return;
+
+// Fetch form definition from the forms-builder plugin API
+const response = await fetch(
+	new URL("/_emdash/api/plugins/emdash-form-builder/forms.get", Astro.url),
+	{
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ formId }),
+	},
+);
+
+if (!response.ok) return;
+
+const body = (await response.json()) as {
+	data?: {
+		form?: {
+			definition?: {
+				meta: { name: string; slug: string };
+				fields: Record<
+					string,
+					{
+						id: string;
+						type: string;
+						name: string;
+						label: string;
+						defaultValue: string;
+						ui: {
+							placeholder: string;
+							width: string;
+							helpText: string;
+							style?: {
+								marginTop?: string;
+								marginBottom?: string;
+								padding?: string;
+								borderRadius?: string;
+								backgroundColor?: string;
+								labelFontSize?: string;
+								labelFontWeight?: string;
+								inputFontSize?: string;
+								placeholderColor?: string;
+								borderStyle?: string;
+								focusBorderColor?: string;
+								errorBorderColor?: string;
+							};
+						};
+						validation: { required: boolean };
+						options?: Array<{ label: string; value: string }>;
+						ratingConfig?: {
+							maxRating: number;
+							iconType: string;
+							allowHalf: boolean;
+						};
+						fileConfig?: {
+							allowedTypes: string;
+							maxSizeMb: number;
+							maxFiles: number;
+							multiple: boolean;
+							showPreview: boolean;
+							dragDropArea: boolean;
+						};
+						signatureConfig?: {
+							mode: string;
+							showClearButton: boolean;
+						};
+						multiselectConfig?: {
+							maxSelections: number;
+						};
+					}
+				>;
+				steps: Array<{ id: string; title: string; fields: string[] }>;
+				submitButton?: {
+					label: string;
+					size?: string;
+					align?: string;
+					variant?: string;
+					backgroundColor?: string;
+					textColor?: string;
+					borderRadius?: string;
+					borderColor?: string;
+					fontSize?: string;
+					fontWeight?: string;
+					paddingX?: string;
+					paddingY?: string;
+					showReset?: boolean;
+					resetLabel?: string;
+					customClass?: string;
+				};
+			};
+		};
+	};
+};
+
+const definition = body.data?.form?.definition;
+if (!definition) return;
+
+const submitUrl = `/_emdash/api/plugins/emdash-form-builder/forms.submit`;
+const btn = definition.submitButton;
+const btnLabel = btn?.label || "Submit";
+const btnAlign = btn?.align || "right";
+const alignMap: Record<string, string> = {
+	left: "flex-start",
+	center: "center",
+	right: "flex-end",
+	full: "stretch",
+};
+
+// Build inline style for submit button from saved config
+const btnStyle = [
+	btn?.backgroundColor ? `background-color:${btn.backgroundColor}` : "",
+	btn?.textColor ? `color:${btn.textColor}` : "",
+	btn?.borderRadius ? `border-radius:${btn.borderRadius}` : "",
+	btn?.borderColor ? `border-color:${btn.borderColor}` : "",
+	btn?.fontSize ? `font-size:${btn.fontSize}` : "",
+	btn?.fontWeight ? `font-weight:${btn.fontWeight}` : "",
+	btn?.paddingX ? `padding-left:${btn.paddingX};padding-right:${btn.paddingX}` : "",
+	btn?.paddingY ? `padding-top:${btn.paddingY};padding-bottom:${btn.paddingY}` : "",
+	btn?.variant === "outline" ? "background-color:transparent;border:1px solid" : "",
+	btn?.variant === "ghost" ? "background-color:transparent;border:none" : "",
+]
+	.filter(Boolean)
+	.join(";");
+
+// Collect fields in step order
+const orderedFields = definition.steps.flatMap((step) =>
+	step.fields
+		.map((fieldId) => definition.fields[fieldId])
+		.filter((f): f is NonNullable<typeof f> => f != null),
+);
+
+function inputType(fieldType: string): string {
+	switch (fieldType) {
+		case "email":
+			return "email";
+		case "tel":
+		case "mobile":
+		case "phone":
+			return "tel";
+		case "number":
+		case "input_price":
+		case "prcfld":
+			return "number";
+		case "password":
+			return "password";
+		case "date":
+			return "date";
+		case "file_upload":
+		case "file":
+			return "file";
+		case "url":
+			return "url";
+		case "range":
+			return "range";
+		case "color_picker":
+			return "color";
+		case "hidden":
+			return "hidden";
+		default:
+			return "text";
+	}
+}
+
+const choiceTypes = new Set(["select", "multiselect", "radio", "checkbox", "yes_no"]);
+const textareaTypes = new Set(["textarea"]);
+// Types with special rendering (not a plain <input>)
+const ratingTypes = new Set(["rating", "rating_star"]);
+const fivePointTypes = new Set(["five_point", "five_point_scale"]);
+const toggleTypes = new Set(["toggle"]);
+const signatureTypes = new Set(["signature"]);
+const dividerTypes = new Set(["divider"]);
+const totalPriceTypes = new Set(["ttlprc", "total_price"]);
+const hiddenTypes = new Set(["hidden"]);
+const fileTypes = new Set(["file", "file_upload"]);
+
+// Build a name -> fieldId mapping so the client script can construct the answers array
+const fieldNameToId: Record<string, string> = {};
+for (const field of orderedFields) {
+	fieldNameToId[field.name] = field.id;
+}
+
+// JSON-LD schema — only on pages with a form (free version includes publisher links)
+const pageUrl = Astro.url.href;
+const schemaLd = {
+	"@context": "https://schema.org",
+	"@type": "WebPage",
+	"@id": `${pageUrl}#webpage`,
+	url: pageUrl,
+	mentions: {
+		"@type": "SoftwareApplication",
+		"@id": "https://github.com/hassantafreshi/emdash-forms-builder#software",
+		name: "EmForm Builder",
+		alternateName: "Free Form Builder Plugin for EmDash CMS",
+		description:
+			"EmForm Builder is an EmDash CMS plugin for creating contact forms, payment forms, and survey forms.",
+		applicationCategory: ["BusinessApplication", "WebApplication"],
+		operatingSystem: "EmDash CMS",
+		softwareVersion: "0.1.0",
+		url: "https://github.com/hassantafreshi/emdash-forms-builder",
+		isAccessibleForFree: true,
+		keywords: [
+			"form builder",
+			"contact form plugin",
+			"payment form plugin",
+			"survey form plugin",
+			"email notification form",
+		],
+		publisher: {
+			"@type": "Organization",
+			"@id": "https://whitestudio.team/#organization",
+			name: "EmForm Builder - Free Form Builder Plugin for EmDash CMS",
+			url: "https://whitestudio.team",
+		},
+	},
+};
+---
+
+<form
+	class="emdash-form-embed"
+	action={submitUrl}
+	method="post"
+	aria-label={definition.meta.name}
+	data-field-map={JSON.stringify(fieldNameToId)}
+>
+	<input type="hidden" name="formId" value={formId} />
+
+	<div class="emdash-form-embed__fields">
+		{orderedFields.map((field) => {
+			const fs = field.ui.style;
+			const wrapStyle = [
+				fs?.marginTop ? `margin-top:${fs.marginTop}` : "",
+				fs?.marginBottom ? `margin-bottom:${fs.marginBottom}` : "",
+				fs?.padding ? `padding:${fs.padding}` : "",
+			].filter(Boolean).join(";") || undefined;
+			const lblStyle = [
+				fs?.labelFontSize ? `font-size:${fs.labelFontSize}` : "",
+				fs?.labelFontWeight ? `font-weight:${fs.labelFontWeight}` : "",
+			].filter(Boolean).join(";") || undefined;
+			const inpStyle = [
+				fs?.borderRadius ? `border-radius:${fs.borderRadius}` : "",
+				fs?.borderStyle ? `border-style:${fs.borderStyle}` : "",
+				fs?.backgroundColor ? `background-color:${fs.backgroundColor}` : "",
+				fs?.inputFontSize ? `font-size:${fs.inputFontSize}` : "",
+			].filter(Boolean).join(";") || undefined;
+
+			/* ---- Divider (no label, no input) ---- */
+			if (dividerTypes.has(field.type)) {
+				return <hr class="emdash-form-embed__divider" style={wrapStyle} />;
+			}
+
+			/* ---- Hidden field (invisible) ---- */
+			if (hiddenTypes.has(field.type)) {
+				return <input type="hidden" name={field.name} value={field.defaultValue} />;
+			}
+
+			return (
+			<div
+				class={`emdash-form-embed__group${field.ui.width === "half" ? " emdash-form-embed__group--half" : field.ui.width === "third" ? " emdash-form-embed__group--third" : ""}`}
+				style={wrapStyle}
+			>
+				<label for={`efb-${field.name}`} class="emdash-form-embed__label" style={lblStyle}>
+					{field.label}
+					{field.validation.required && <span class="emdash-form-embed__required">*</span>}
+				</label>
+
+				{/* ---- Textarea ---- */}
+				{textareaTypes.has(field.type) ? (
+					<textarea
+						id={`efb-${field.name}`}
+						name={field.name}
+						class="emdash-form-embed__input emdash-form-embed__textarea"
+						placeholder={field.ui.placeholder}
+						required={field.validation.required}
+						rows="4"
+						style={inpStyle}
+					>
+						{field.defaultValue}
+					</textarea>
+
+				/* ---- Select (searchable dropdown) ---- */
+				) : choiceTypes.has(field.type) && field.type === "select" ? (
+					<div class="efb-select-wrap" data-field-name={field.name} data-placeholder={field.ui.placeholder || "Select..."}>
+						<input type="hidden" id={`efb-${field.name}`} name={field.name} required={field.validation.required ? true : undefined} />
+						<button type="button" class="efb-select-trigger emdash-form-embed__input" aria-haspopup="listbox" style={inpStyle}>
+							<span class="efb-select-label">{field.ui.placeholder || "Select..."}</span>
+							<span class="efb-select-arrow">&#9662;</span>
+						</button>
+						<div class="efb-select-dropdown" role="listbox" hidden>
+							<input type="text" class="efb-select-search" placeholder="Search..." autocomplete="off" />
+							<div class="efb-select-options">
+								{(field.options ?? []).map((opt) => (
+									<div class="efb-select-option" data-value={opt.value} role="option">{opt.label}</div>
+								))}
+							</div>
+						</div>
+					</div>
+
+				/* ---- Multiselect (searchable dropdown with chips) ---- */
+				) : choiceTypes.has(field.type) && field.type === "multiselect" ? (
+					<div class="efb-multiselect-wrap" data-field-name={field.name} data-max-selections={field.multiselectConfig?.maxSelections || 0}>
+						<div class="efb-multiselect-trigger emdash-form-embed__input" tabindex="0" role="combobox" aria-haspopup="listbox" style={inpStyle}>
+							<div class="efb-multiselect-chips"></div>
+							<span class="efb-multiselect-placeholder">Select options...</span>
+							<span class="efb-select-arrow">&#9662;</span>
+						</div>
+						<div class="efb-select-dropdown" role="listbox" hidden>
+							<input type="text" class="efb-select-search" placeholder="Search..." autocomplete="off" />
+							<div class="efb-select-options">
+								{(field.options ?? []).map((opt) => (
+									<div class="efb-select-option" data-value={opt.value} role="option">
+										<span class="efb-ms-check">&#10003;</span>
+										{opt.label}
+									</div>
+								))}
+							</div>
+						</div>
+					</div>
+
+				/* ---- Radio / Yes-No ---- */
+				) : choiceTypes.has(field.type) && (field.type === "radio" || field.type === "yes_no") ? (
+					<div class="emdash-form-embed__radio-group">
+						{(field.type === "yes_no"
+							? [
+									{ label: "Yes", value: "yes" },
+									{ label: "No", value: "no" },
+								]
+							: field.options ?? []
+						).map((opt) => (
+							<label class="emdash-form-embed__radio-label">
+								<input
+									type="radio"
+									name={field.name}
+									value={opt.value}
+									required={field.validation.required}
+								/>
+								{opt.label}
+							</label>
+						))}
+					</div>
+
+				/* ---- Checkbox ---- */
+				) : choiceTypes.has(field.type) && field.type === "checkbox" ? (
+					<div class="emdash-form-embed__checkbox-group">
+						{(field.options ?? []).map((opt) => (
+							<label class="emdash-form-embed__checkbox-label">
+								<input type="checkbox" name={field.name} value={opt.value} />
+								{opt.label}
+							</label>
+						))}
+					</div>
+
+				/* ---- Toggle (switch) ---- */
+				) : toggleTypes.has(field.type) ? (
+					<label class="emdash-form-embed__toggle-label">
+						<input
+							type="checkbox"
+							name={field.name}
+							value="1"
+							class="emdash-form-embed__toggle-input"
+						/>
+						<span class="emdash-form-embed__toggle-switch"></span>
+					</label>
+
+				/* ---- Rating (stars) ---- */
+				) : ratingTypes.has(field.type) ? (
+					<div class="emdash-form-embed__rating-group" data-field-name={field.name} data-max-rating={field.ratingConfig?.maxRating || 5}>
+						{Array.from({ length: field.ratingConfig?.maxRating || 5 }, (_, i) => i + 1).map((star) => (
+							<label class="emdash-form-embed__rating-star" data-value={star}>
+								<input type="radio" name={field.name} value={String(star)} required={field.validation.required} />
+								<span class="emdash-form-embed__star">&#9733;</span>
+							</label>
+						))}
+					</div>
+
+				/* ---- Five-point scale ---- */
+				) : fivePointTypes.has(field.type) ? (
+					<div class="emdash-form-embed__scale-group">
+						{[1, 2, 3, 4, 5].map((n) => (
+							<label class="emdash-form-embed__scale-option">
+								<input type="radio" name={field.name} value={String(n)} required={field.validation.required} />
+								<span>{n}</span>
+							</label>
+						))}
+					</div>
+
+				/* ---- Signature ---- */
+				) : signatureTypes.has(field.type) ? (
+					<div class="emdash-form-embed__signature-pad" data-field-name={field.name} data-show-clear={field.signatureConfig?.showClearButton !== false ? "true" : "false"}>
+						<canvas class="emdash-form-embed__signature-canvas" width="400" height="150"></canvas>
+						<input type="hidden" name={field.name} />
+						{field.signatureConfig?.showClearButton !== false && (
+							<button type="button" class="emdash-form-embed__signature-clear">Clear</button>
+						)}
+					</div>
+
+				/* ---- Total price (read-only) ---- */
+				) : totalPriceTypes.has(field.type) ? (
+					<div class="emdash-form-embed__total-price" data-field-name={field.name}>
+						<span class="emdash-form-embed__total-value">0.00</span>
+						<input type="hidden" name={field.name} value="0" />
+					</div>
+
+				/* ---- Default: standard input (text, email, tel, number, password, date, url, range, color, prcfld) ---- */
+				) : fileTypes.has(field.type) ? (
+					<div class="efb-file-wrap" data-field-name={field.name} data-allowed-types={field.fileConfig?.allowedTypes || ""} data-max-size={field.fileConfig?.maxSizeMb || 10} data-max-files={field.fileConfig?.maxFiles || 1} data-multiple={field.fileConfig?.multiple ? "true" : "false"}>
+						<div class="efb-file-dropzone">
+							<div class="efb-file-dropzone-icon">&#8682;</div>
+							<p class="efb-file-dropzone-text">Drag & drop files here or <span class="efb-file-browse">browse</span></p>
+							{field.fileConfig?.allowedTypes && (
+								<p class="efb-file-dropzone-hint">Allowed: {field.fileConfig.allowedTypes}</p>
+							)}
+							<p class="efb-file-dropzone-hint">Max size: {field.fileConfig?.maxSizeMb || 10}MB</p>
+						</div>
+						<input type="file" name={field.name} class="efb-file-input" accept={field.fileConfig?.allowedTypes || undefined} multiple={field.fileConfig?.multiple ? true : undefined} style="display:none" />
+						<div class="efb-file-list"></div>
+					</div>
+				) : (
+					<input
+						id={`efb-${field.name}`}
+						name={field.name}
+						type={inputType(field.type)}
+						class="emdash-form-embed__input"
+						placeholder={field.ui.placeholder}
+						value={field.defaultValue}
+						required={field.validation.required}
+						style={inpStyle}
+					/>
+				)}
+
+				{field.ui.helpText && <p class="emdash-form-embed__help">{field.ui.helpText}</p>}
+			</div>
+		);})}
+	</div>
+
+	<div class="emdash-form-embed__actions" style={`justify-content:${alignMap[btnAlign] || "flex-end"}`}>
+		{btn?.showReset && (
+			<button type="reset" class="emdash-form-embed__reset">{btn.resetLabel || "Reset"}</button>
+		)}
+		<button
+			type="submit"
+			class={`emdash-form-embed__submit ${btn?.customClass || ""}`.trim()}
+			style={btnStyle || undefined}
+		>{btnLabel}</button>
+	</div>
+</form>
+
+<!-- JSON-LD structured data — free version (includes publisher links) -->
+<script type="application/ld+json" set:html={JSON.stringify(schemaLd)} />
+
+<style>
+	.emdash-form-embed {
+		max-width: 40rem;
+		font-family: inherit;
+	}
+	.emdash-form-embed__fields {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 1rem;
+	}
+	.emdash-form-embed__group {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+		min-width: 0;
+		width: 100%;
+	}
+	.emdash-form-embed__group--half {
+		width: calc(50% - 0.5rem);
+	}
+	.emdash-form-embed__group--third {
+		width: calc(33.333% - 0.667rem);
+	}
+	.emdash-form-embed__label {
+		font-size: 0.875rem;
+		font-weight: 500;
+	}
+	.emdash-form-embed__required {
+		color: #dc2626;
+		margin-left: 0.125rem;
+	}
+	.emdash-form-embed__input {
+		padding: 0.5rem 0.75rem;
+		border: 1px solid #d1d5db;
+		border-radius: 0.5rem;
+		font-size: 0.875rem;
+		font-family: inherit;
+		outline: none;
+		transition: border-color 0.15s;
+	}
+	.emdash-form-embed__input:focus {
+		border-color: #3b82f6;
+		box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+	}
+	.emdash-form-embed__textarea {
+		resize: vertical;
+	}
+	.emdash-form-embed__radio-group,
+	.emdash-form-embed__checkbox-group {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+	.emdash-form-embed__radio-label,
+	.emdash-form-embed__checkbox-label {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.875rem;
+		cursor: pointer;
+	}
+	.emdash-form-embed__help {
+		font-size: 0.75rem;
+		color: #6b7280;
+		margin: 0;
+	}
+	.emdash-form-embed__submit {
+		padding: 0.625rem 1.5rem;
+		background-color: #2563eb;
+		color: #fff;
+		border: none;
+		border-radius: 0.5rem;
+		font-size: 0.875rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: background-color 0.15s;
+	}
+	.emdash-form-embed__submit:hover {
+		background-color: #1d4ed8;
+	}
+	.emdash-form-embed__actions {
+		display: flex;
+		gap: 0.75rem;
+		margin-top: 1.25rem;
+		padding-top: 1rem;
+	}
+	.emdash-form-embed__reset {
+		padding: 0.625rem 1.5rem;
+		background-color: transparent;
+		color: #374151;
+		border: 1px solid #d1d5db;
+		border-radius: 0.5rem;
+		font-size: 0.875rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background-color 0.15s;
+	}
+	.emdash-form-embed__reset:hover {
+		background-color: #f3f4f6;
+	}
+	/* Divider */
+	.emdash-form-embed__divider {
+		width: 100%;
+		border: none;
+		border-top: 1px solid #d1d5db;
+		margin: 0.5rem 0;
+	}
+	/* Toggle (switch) */
+	.emdash-form-embed__toggle-label {
+		display: inline-flex;
+		align-items: center;
+		cursor: pointer;
+	}
+	.emdash-form-embed__toggle-input {
+		display: none;
+	}
+	.emdash-form-embed__toggle-switch {
+		width: 2.5rem;
+		height: 1.375rem;
+		background-color: #d1d5db;
+		border-radius: 9999px;
+		position: relative;
+		transition: background-color 0.2s;
+	}
+	.emdash-form-embed__toggle-switch::after {
+		content: "";
+		position: absolute;
+		top: 0.125rem;
+		left: 0.125rem;
+		width: 1.125rem;
+		height: 1.125rem;
+		background-color: #fff;
+		border-radius: 9999px;
+		transition: transform 0.2s;
+	}
+	.emdash-form-embed__toggle-input:checked + .emdash-form-embed__toggle-switch {
+		background-color: #3b82f6;
+	}
+	.emdash-form-embed__toggle-input:checked + .emdash-form-embed__toggle-switch::after {
+		transform: translateX(1.125rem);
+	}
+	/* Rating (stars) */
+	.emdash-form-embed__rating-group {
+		display: flex;
+		gap: 0.25rem;
+	}
+	.emdash-form-embed__rating-star {
+		cursor: pointer;
+		position: relative;
+	}
+	.emdash-form-embed__rating-star input {
+		display: none;
+	}
+	.emdash-form-embed__star {
+		font-size: 1.5rem;
+		color: #d1d5db;
+		transition: color 0.2s, transform 0.2s;
+		display: inline-block;
+	}
+	.emdash-form-embed__star.efb-star-active {
+		color: #f59e0b;
+	}
+	.emdash-form-embed__star.efb-star-animate {
+		animation: efb-star-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+	}
+	.emdash-form-embed__rating-star:hover .emdash-form-embed__star {
+		transform: scale(1.2);
+	}
+	@keyframes efb-star-pop {
+		0% { transform: scale(1); }
+		50% { transform: scale(1.35); }
+		100% { transform: scale(1); }
+	}
+	/* Five-point scale */
+	.emdash-form-embed__scale-group {
+		display: flex;
+		gap: 0.5rem;
+	}
+	.emdash-form-embed__scale-option {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		cursor: pointer;
+		padding: 0.375rem 0.75rem;
+		border: 1px solid #d1d5db;
+		border-radius: 0.375rem;
+		font-size: 0.875rem;
+		transition: background-color 0.15s, border-color 0.15s;
+	}
+	.emdash-form-embed__scale-option input {
+		display: none;
+	}
+	.emdash-form-embed__scale-option:has(input:checked) {
+		background-color: #3b82f6;
+		color: #fff;
+		border-color: #3b82f6;
+	}
+	/* Signature */
+	.emdash-form-embed__signature-pad {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+	.emdash-form-embed__signature-canvas {
+		border: 1px solid #d1d5db;
+		border-radius: 0.5rem;
+		cursor: crosshair;
+	}
+	.emdash-form-embed__signature-clear {
+		align-self: flex-start;
+		padding: 0.25rem 0.75rem;
+		font-size: 0.75rem;
+		background: transparent;
+		border: 1px solid #d1d5db;
+		border-radius: 0.25rem;
+		cursor: pointer;
+	}
+	/* Total price */
+	.emdash-form-embed__total-price {
+		font-size: 1.25rem;
+		font-weight: 600;
+		padding: 0.5rem 0;
+	}
+	.emdash-form-embed__message {
+		padding: 0.75rem 1rem;
+		border-radius: 0.5rem;
+		font-size: 0.875rem;
+		margin-top: 0.75rem;
+	}
+	.emdash-form-embed__message--success {
+		background-color: #f0fdf4;
+		color: #166534;
+		border: 1px solid #bbf7d0;
+	}
+	.emdash-form-embed__message--error {
+		background-color: #fef2f2;
+		color: #991b1b;
+		border: 1px solid #fecaca;
+	}
+
+	/* ---- Searchable Select ---- */
+	.efb-select-wrap {
+		position: relative;
+	}
+	.efb-select-trigger {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		width: 100%;
+		cursor: pointer;
+		background: #fff;
+		text-align: left;
+		font-family: inherit;
+		appearance: none;
+		-webkit-appearance: none;
+	}
+	.efb-select-label {
+		flex: 1;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.efb-select-arrow {
+		margin-inline-start: 0.5rem;
+		font-size: 0.75rem;
+		color: #6b7280;
+		flex-shrink: 0;
+		transition: transform 0.2s;
+	}
+	.efb-select-wrap.efb-open .efb-select-arrow,
+	.efb-multiselect-wrap.efb-open .efb-select-arrow {
+		transform: rotate(180deg);
+	}
+	.efb-select-dropdown {
+		position: absolute;
+		top: 100%;
+		left: 0;
+		right: 0;
+		background: #fff;
+		border: 1px solid #d1d5db;
+		border-radius: 0.5rem;
+		margin-top: 0.25rem;
+		z-index: 50;
+		box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+		overflow: hidden;
+	}
+	.efb-select-search {
+		width: 100%;
+		padding: 0.5rem 0.75rem;
+		border: none;
+		border-bottom: 1px solid #e5e7eb;
+		font-size: 0.8125rem;
+		outline: none;
+		font-family: inherit;
+		box-sizing: border-box;
+	}
+	.efb-select-options {
+		max-height: 12rem;
+		overflow-y: auto;
+	}
+	.efb-select-option {
+		padding: 0.5rem 0.75rem;
+		font-size: 0.875rem;
+		cursor: pointer;
+		transition: background-color 0.1s;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.efb-select-option:hover {
+		background-color: #f3f4f6;
+	}
+	.efb-select-option.efb-selected {
+		background-color: #eff6ff;
+		color: #2563eb;
+		font-weight: 500;
+	}
+	.efb-select-option.efb-hidden {
+		display: none;
+	}
+
+	/* ---- Multiselect ---- */
+	.efb-multiselect-wrap {
+		position: relative;
+	}
+	.efb-multiselect-trigger {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		min-height: 2.375rem;
+		padding-top: 0.25rem;
+		padding-bottom: 0.25rem;
+		cursor: pointer;
+		background: #fff;
+		gap: 0.25rem;
+		appearance: none;
+		-webkit-appearance: none;
+		text-align: start;
+	}
+	.efb-multiselect-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem;
+		flex: 1;
+	}
+	.efb-multiselect-placeholder {
+		color: #9ca3af;
+		font-size: 0.875rem;
+		text-align: start;
+	}
+	.efb-ms-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.1875rem 0.375rem 0.1875rem 0.625rem;
+		background: #f1f5f9;
+		color: #334155;
+		border: 1px solid #e2e8f0;
+		border-radius: 0.375rem;
+		font-size: 0.8125rem;
+		font-weight: 500;
+		white-space: nowrap;
+		line-height: 1.4;
+	}
+	.efb-ms-chip-remove {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1rem;
+		height: 1rem;
+		cursor: pointer;
+		font-size: 0.75rem;
+		line-height: 1;
+		color: #94a3b8;
+		transition: color 0.15s;
+		background: none;
+		border: none;
+		border-radius: 0.25rem;
+		padding: 0;
+	}
+	.efb-ms-chip-remove:hover {
+		color: #dc2626;
+	}
+	.efb-ms-check {
+		font-size: 0.75rem;
+		opacity: 0;
+		color: #2563eb;
+		transition: opacity 0.15s;
+	}
+	.efb-select-option.efb-selected .efb-ms-check {
+		opacity: 1;
+	}
+
+	/* ---- File Upload (Drag & Drop) ---- */
+	.efb-file-wrap {
+		width: 100%;
+	}
+	.efb-file-dropzone {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 1.5rem;
+		border: 2px dashed #d1d5db;
+		border-radius: 0.5rem;
+		text-align: center;
+		cursor: pointer;
+		transition: border-color 0.2s, background-color 0.2s;
+	}
+	.efb-file-dropzone:hover,
+	.efb-file-dropzone.efb-dragover {
+		border-color: #3b82f6;
+		background-color: #eff6ff;
+	}
+	.efb-file-dropzone-icon {
+		font-size: 2rem;
+		color: #9ca3af;
+		margin-bottom: 0.5rem;
+	}
+	.efb-file-dropzone-text {
+		font-size: 0.875rem;
+		color: #6b7280;
+		margin: 0;
+	}
+	.efb-file-browse {
+		color: #2563eb;
+		font-weight: 500;
+		cursor: pointer;
+		text-decoration: underline;
+	}
+	.efb-file-dropzone-hint {
+		font-size: 0.75rem;
+		color: #9ca3af;
+		margin: 0.25rem 0 0;
+	}
+	.efb-file-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+		margin-top: 0.5rem;
+	}
+	.efb-file-item {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.375rem 0.625rem;
+		background: #f9fafb;
+		border: 1px solid #e5e7eb;
+		border-radius: 0.375rem;
+		font-size: 0.8125rem;
+	}
+	.efb-file-item-info {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		overflow: hidden;
+	}
+	.efb-file-item-name {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.efb-file-item-size {
+		color: #9ca3af;
+		font-size: 0.75rem;
+		flex-shrink: 0;
+	}
+	.efb-file-item-remove {
+		background: none;
+		border: none;
+		color: #ef4444;
+		cursor: pointer;
+		font-size: 1rem;
+		padding: 0 0.25rem;
+		line-height: 1;
+	}
+</style>
+
+<script is:inline>
+	document.addEventListener("DOMContentLoaded", function () {
+
+		function formatSize(bytes) {
+			if (bytes < 1024) return bytes + " B";
+			if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+			return (bytes / 1048576).toFixed(1) + " MB";
+		}
+
+		// =====================================================================
+		// Signature Canvas
+		// =====================================================================
+		document.querySelectorAll(".emdash-form-embed__signature-pad").forEach(function (pad) {
+			var canvas = pad.querySelector(".emdash-form-embed__signature-canvas");
+			var hiddenInput = pad.querySelector("input[type=hidden]");
+			var clearBtn = pad.querySelector(".emdash-form-embed__signature-clear");
+			if (!canvas || !hiddenInput) return;
+
+			var ctx = canvas.getContext("2d");
+			var drawing = false;
+			var hasDrawn = false;
+
+			function getPos(e) {
+				var rect = canvas.getBoundingClientRect();
+				var scaleX = canvas.width / rect.width;
+				var scaleY = canvas.height / rect.height;
+				if (e.touches && e.touches[0]) {
+					return { x: (e.touches[0].clientX - rect.left) * scaleX, y: (e.touches[0].clientY - rect.top) * scaleY };
+				}
+				return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+			}
+
+			function startDraw(e) {
+				e.preventDefault();
+				drawing = true;
+				hasDrawn = true;
+				var pos = getPos(e);
+				ctx.beginPath();
+				ctx.moveTo(pos.x, pos.y);
+			}
+
+			function draw(e) {
+				if (!drawing) return;
+				e.preventDefault();
+				var pos = getPos(e);
+				ctx.lineWidth = 2;
+				ctx.lineCap = "round";
+				ctx.lineJoin = "round";
+				ctx.strokeStyle = "#1f2937";
+				ctx.lineTo(pos.x, pos.y);
+				ctx.stroke();
+			}
+
+			function stopDraw() {
+				if (!drawing) return;
+				drawing = false;
+				if (hasDrawn) {
+					hiddenInput.value = canvas.toDataURL("image/png");
+				}
+			}
+
+			canvas.addEventListener("mousedown", startDraw);
+			canvas.addEventListener("mousemove", draw);
+			canvas.addEventListener("mouseup", stopDraw);
+			canvas.addEventListener("mouseleave", stopDraw);
+			canvas.addEventListener("touchstart", startDraw, { passive: false });
+			canvas.addEventListener("touchmove", draw, { passive: false });
+			canvas.addEventListener("touchend", stopDraw);
+
+			if (clearBtn) {
+				clearBtn.addEventListener("click", function () {
+					ctx.clearRect(0, 0, canvas.width, canvas.height);
+					hiddenInput.value = "";
+					hasDrawn = false;
+				});
+			}
+
+			// Make canvas responsive
+			function resizeCanvas() {
+				var rect = canvas.parentElement.getBoundingClientRect();
+				canvas.style.width = "100%";
+				canvas.style.height = "auto";
+			}
+			resizeCanvas();
+		});
+
+		// =====================================================================
+		// Rating Stars
+		// =====================================================================
+		document.querySelectorAll(".emdash-form-embed__rating-group").forEach(function (group) {
+			var stars = group.querySelectorAll(".emdash-form-embed__rating-star");
+			var currentValue = 0;
+
+			function updateStars(value, animate) {
+				stars.forEach(function (star) {
+					var v = parseInt(star.dataset.value);
+					var span = star.querySelector(".emdash-form-embed__star");
+					if (v <= value) {
+						span.classList.add("efb-star-active");
+						if (animate) {
+							span.classList.remove("efb-star-animate");
+							void span.offsetWidth;
+							span.classList.add("efb-star-animate");
+						}
+					} else {
+						span.classList.remove("efb-star-active");
+					}
+				});
+			}
+
+			stars.forEach(function (star) {
+				star.addEventListener("mouseenter", function () {
+					updateStars(parseInt(star.dataset.value), false);
+				});
+
+				star.addEventListener("click", function () {
+					currentValue = parseInt(star.dataset.value);
+					var radio = star.querySelector("input[type=radio]");
+					if (radio) radio.checked = true;
+					updateStars(currentValue, true);
+				});
+			});
+
+			group.addEventListener("mouseleave", function () {
+				updateStars(currentValue, false);
+			});
+		});
+
+		// =====================================================================
+		// Searchable Select
+		// =====================================================================
+		document.querySelectorAll(".efb-select-wrap").forEach(function (wrap) {
+			var trigger = wrap.querySelector(".efb-select-trigger");
+			var dropdown = wrap.querySelector(".efb-select-dropdown");
+			var search = wrap.querySelector(".efb-select-search");
+			var options = wrap.querySelectorAll(".efb-select-option");
+			var label = wrap.querySelector(".efb-select-label");
+			var hidden = wrap.querySelector("input[type=hidden]");
+			var placeholder = wrap.dataset.placeholder || "Select...";
+
+			function open() {
+				dropdown.hidden = false;
+				wrap.classList.add("efb-open");
+				search.value = "";
+				filterOptions("");
+				search.focus();
+			}
+
+			function close() {
+				dropdown.hidden = true;
+				wrap.classList.remove("efb-open");
+			}
+
+			function filterOptions(query) {
+				var q = query.toLowerCase();
+				options.forEach(function (opt) {
+					var text = opt.textContent.toLowerCase();
+					opt.classList.toggle("efb-hidden", q.length > 0 && !text.includes(q));
+				});
+			}
+
+			trigger.addEventListener("click", function (e) {
+				e.stopPropagation();
+				if (dropdown.hidden) open(); else close();
+			});
+
+			search.addEventListener("input", function () {
+				filterOptions(search.value);
+			});
+
+			search.addEventListener("keydown", function (e) {
+				if (e.key === "Escape") close();
+			});
+
+			options.forEach(function (opt) {
+				opt.addEventListener("click", function () {
+					var val = opt.dataset.value;
+					hidden.value = val;
+					label.textContent = opt.textContent || placeholder;
+					options.forEach(function (o) { o.classList.remove("efb-selected"); });
+					opt.classList.add("efb-selected");
+					close();
+				});
+			});
+
+			document.addEventListener("click", function (e) {
+				if (!wrap.contains(e.target)) close();
+			});
+		});
+
+		// =====================================================================
+		// Searchable Multiselect
+		// =====================================================================
+		document.querySelectorAll(".efb-multiselect-wrap").forEach(function (wrap) {
+			var trigger = wrap.querySelector(".efb-multiselect-trigger");
+			var dropdown = wrap.querySelector(".efb-select-dropdown");
+			var search = wrap.querySelector(".efb-select-search");
+			var options = wrap.querySelectorAll(".efb-select-option");
+			var chipsContainer = wrap.querySelector(".efb-multiselect-chips");
+			var placeholderEl = wrap.querySelector(".efb-multiselect-placeholder");
+			var fieldName = wrap.dataset.fieldName;
+			var maxSelections = parseInt(wrap.dataset.maxSelections) || 0;
+			var selected = [];
+
+			function open() {
+				dropdown.hidden = false;
+				wrap.classList.add("efb-open");
+				search.value = "";
+				filterOptions("");
+				search.focus();
+			}
+
+			function close() {
+				dropdown.hidden = true;
+				wrap.classList.remove("efb-open");
+			}
+
+			function filterOptions(query) {
+				var q = query.toLowerCase();
+				options.forEach(function (opt) {
+					var text = opt.textContent.toLowerCase();
+					opt.classList.toggle("efb-hidden", q.length > 0 && !text.includes(q));
+				});
+			}
+
+			function renderChips() {
+				chipsContainer.innerHTML = "";
+				// Remove old hidden inputs for this field
+				wrap.querySelectorAll("input[type=hidden]").forEach(function (inp) { inp.remove(); });
+
+				selected.forEach(function (val) {
+					var optEl = wrap.querySelector('.efb-select-option[data-value="' + CSS.escape(val) + '"]');
+					var labelText = optEl ? optEl.textContent.replace("✓", "").trim() : val;
+
+					var chip = document.createElement("span");
+					chip.className = "efb-ms-chip";
+					var chipLabel = document.createElement("span");
+					chipLabel.textContent = labelText;
+					chip.appendChild(chipLabel);
+					var removeBtn = document.createElement("button");
+					removeBtn.type = "button";
+					removeBtn.className = "efb-ms-chip-remove";
+					removeBtn.innerHTML = '<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="2" y1="2" x2="8" y2="8"/><line x1="8" y1="2" x2="2" y2="8"/></svg>';
+					removeBtn.addEventListener("click", function (e) {
+						e.stopPropagation();
+						toggleValue(val);
+					});
+					chip.appendChild(removeBtn);
+					chipsContainer.appendChild(chip);
+
+					var hiddenInput = document.createElement("input");
+					hiddenInput.type = "hidden";
+					hiddenInput.name = fieldName;
+					hiddenInput.value = val;
+					wrap.appendChild(hiddenInput);
+				});
+
+				placeholderEl.style.display = selected.length > 0 ? "none" : "";
+
+				options.forEach(function (opt) {
+					opt.classList.toggle("efb-selected", selected.includes(opt.dataset.value));
+				});
+			}
+
+			function toggleValue(val) {
+				var idx = selected.indexOf(val);
+				if (idx === -1) {
+					if (maxSelections > 0 && selected.length >= maxSelections) return;
+					selected.push(val);
+				} else {
+					selected.splice(idx, 1);
+				}
+				renderChips();
+			}
+
+			trigger.addEventListener("click", function (e) {
+				e.stopPropagation();
+				if (dropdown.hidden) open(); else close();
+			});
+
+			search.addEventListener("input", function () {
+				filterOptions(search.value);
+			});
+
+			search.addEventListener("keydown", function (e) {
+				if (e.key === "Escape") close();
+			});
+
+			options.forEach(function (opt) {
+				opt.addEventListener("click", function (e) {
+					e.stopPropagation();
+					toggleValue(opt.dataset.value);
+				});
+			});
+
+			document.addEventListener("click", function (e) {
+				if (!wrap.contains(e.target)) close();
+			});
+
+			renderChips();
+		});
+
+		// =====================================================================
+		// File Upload (Drag & Drop)
+		// =====================================================================
+		document.querySelectorAll(".efb-file-wrap").forEach(function (wrap) {
+			var dropzone = wrap.querySelector(".efb-file-dropzone");
+			var fileInput = wrap.querySelector(".efb-file-input");
+			var fileList = wrap.querySelector(".efb-file-list");
+			var maxSize = parseFloat(wrap.dataset.maxSize) || 10;
+			var maxFiles = parseInt(wrap.dataset.maxFiles) || 1;
+			var isMultiple = wrap.dataset.multiple === "true";
+			var selectedFiles = [];
+
+			function renderFileList() {
+				fileList.innerHTML = "";
+				selectedFiles.forEach(function (file, i) {
+					var item = document.createElement("div");
+					item.className = "efb-file-item";
+
+					var info = document.createElement("div");
+					info.className = "efb-file-item-info";
+					var nameSpan = document.createElement("span");
+					nameSpan.className = "efb-file-item-name";
+					nameSpan.textContent = file.name;
+					var sizeSpan = document.createElement("span");
+					sizeSpan.className = "efb-file-item-size";
+					sizeSpan.textContent = formatSize(file.size);
+					info.appendChild(nameSpan);
+					info.appendChild(sizeSpan);
+
+					var removeBtn = document.createElement("button");
+					removeBtn.type = "button";
+					removeBtn.className = "efb-file-item-remove";
+					removeBtn.textContent = "×";
+					removeBtn.addEventListener("click", function () {
+						selectedFiles.splice(i, 1);
+						syncToInput();
+						renderFileList();
+					});
+
+					item.appendChild(info);
+					item.appendChild(removeBtn);
+					fileList.appendChild(item);
+				});
+			}
+
+			function syncToInput() {
+				var dt = new DataTransfer();
+				selectedFiles.forEach(function (f) { dt.items.add(f); });
+				fileInput.files = dt.files;
+			}
+
+			function addFiles(files) {
+				for (var i = 0; i < files.length; i++) {
+					var file = files[i];
+					if (file.size > maxSize * 1024 * 1024) {
+						alert(file.name + " exceeds the maximum file size of " + maxSize + "MB.");
+						continue;
+					}
+					if (!isMultiple) {
+						selectedFiles = [file];
+						break;
+					}
+					if (selectedFiles.length >= maxFiles) {
+						alert("Maximum " + maxFiles + " file(s) allowed.");
+						break;
+					}
+					selectedFiles.push(file);
+				}
+				syncToInput();
+				renderFileList();
+			}
+
+			dropzone.addEventListener("click", function () {
+				fileInput.click();
+			});
+
+			fileInput.addEventListener("change", function () {
+				if (fileInput.files.length > 0) {
+					addFiles(fileInput.files);
+				}
+			});
+
+			dropzone.addEventListener("dragover", function (e) {
+				e.preventDefault();
+				dropzone.classList.add("efb-dragover");
+			});
+
+			dropzone.addEventListener("dragleave", function () {
+				dropzone.classList.remove("efb-dragover");
+			});
+
+			dropzone.addEventListener("drop", function (e) {
+				e.preventDefault();
+				dropzone.classList.remove("efb-dragover");
+				if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+					addFiles(e.dataTransfer.files);
+				}
+			});
+		});
+
+		// =====================================================================
+		// Form Submission
+		// =====================================================================
+		document.querySelectorAll("form.emdash-form-embed").forEach(function (form) {
+			form.addEventListener("submit", async function (e) {
+				e.preventDefault();
+
+				var fieldMap = JSON.parse(form.dataset.fieldMap || "{}");
+				var formData = new FormData(form);
+				var formId = formData.get("formId");
+
+				// Collect answers: map field names to fieldIds
+				var answers = [];
+				var seen = new Set();
+
+				for (var pair of formData.entries()) {
+					var name = pair[0];
+					if (name === "formId" || seen.has(name)) continue;
+					var fieldId = fieldMap[name];
+					if (!fieldId) continue;
+					seen.add(name);
+
+					// Collect all values for this field (handles multi-select/checkbox)
+					var allValues = formData.getAll(name);
+					var value = allValues.length === 1 ? allValues[0] : allValues;
+					answers.push({ fieldId: fieldId, value: value });
+				}
+
+				var submitBtn = form.querySelector(".emdash-form-embed__submit");
+				if (submitBtn) {
+					submitBtn.disabled = true;
+					submitBtn.textContent = "Submitting...";
+				}
+
+				// Remove previous messages
+				var prevMsg = form.querySelector(".emdash-form-embed__message");
+				if (prevMsg) prevMsg.remove();
+
+				try {
+					var res = await fetch(form.action, {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ formId: formId, answers: answers }),
+					});
+
+					var result = await res.json();
+
+					if (res.ok && result.data) {
+						var msg = document.createElement("div");
+						msg.className =
+							"emdash-form-embed__message emdash-form-embed__message--success";
+						var thankYou = result.data.thankYou;
+						if (thankYou && thankYou.mode === "redirect" && thankYou.redirectUrl) {
+							window.location.href = thankYou.redirectUrl;
+							return;
+						}
+						var text =
+							(thankYou && thankYou.message) ||
+							"Thank you! Your submission has been received.";
+						var tracking = result.data.trackingCode;
+						msg.textContent =
+							tracking && thankYou && thankYou.includeTrackingCode
+								? text + " (Ref: " + tracking + ")"
+								: text;
+
+						// In dev/test mode, show the magic portal link
+						if (result.data._devPortalUrl) {
+							var devLink = document.createElement("div");
+							devLink.className = "emdash-form-embed__message";
+							devLink.style.cssText = "margin-top:8px;padding:8px 12px;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;font-size:12px;color:#92400e;word-break:break-all";
+							devLink.innerHTML = "<strong>🔧 Dev Mode — Portal URL:</strong><br><a href=\"" +
+								result.data._devPortalUrl.replace(/"/g, "&quot;") +
+								"\" target=\"_blank\" style=\"color:#1d4ed8;text-decoration:underline\">" +
+								result.data._devPortalUrl.replace(/</g, "&lt;") + "</a>";
+							msg.appendChild(devLink);
+						}
+
+						form.replaceWith(msg);
+					} else {
+						var msg = document.createElement("div");
+						msg.className =
+							"emdash-form-embed__message emdash-form-embed__message--error";
+						msg.textContent =
+							(result.error && result.error.message) ||
+							"Something went wrong. Please try again.";
+						var actions = form.querySelector(".emdash-form-embed__actions");
+						if (actions) actions.before(msg);
+					}
+				} catch (_err) {
+					var msg = document.createElement("div");
+					msg.className =
+						"emdash-form-embed__message emdash-form-embed__message--error";
+					msg.textContent =
+						"Network error. Please check your connection and try again.";
+					var actions = form.querySelector(".emdash-form-embed__actions");
+					if (actions) actions.before(msg);
+				} finally {
+					if (submitBtn) {
+						submitBtn.disabled = false;
+						submitBtn.textContent =
+							submitBtn.dataset.originalLabel || "Submit";
+					}
+				}
+			});
+
+			// Store original label for restore after error
+			var btn = form.querySelector(".emdash-form-embed__submit");
+			if (btn) btn.dataset.originalLabel = btn.textContent || "Submit";
+		});
+	});
+</script>
