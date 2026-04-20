@@ -1,9 +1,23 @@
 {
-	"extends": "../tsconfig.base.json",
 	"compilerOptions": {
+		"target": "ES2024",
+		"module": "preserve",
+		"lib": ["ES2024", "DOM", "DOM.Iterable"],
+		"moduleResolution": "bundler",
+		"jsx": "react-jsx",
+		"resolveJsonModule": true,
+		"allowJs": false,
+		"strict": true,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"forceConsistentCasingInFileNames": true,
+		"declaration": true,
+		"declarationMap": true,
+		"sourceMap": true,
+		"noUncheckedIndexedAccess": true,
+		"noImplicitOverride": true,
 		"outDir": "./dist",
-		"rootDir": "./src",
-		"skipLibCheck": true
+		"rootDir": "./src"
 	},
 	"include": ["src/**/*"],
 	"exclude": ["node_modules", "dist", "src/astro", "src/admin.tsx", "src/admin", "src/portal"]

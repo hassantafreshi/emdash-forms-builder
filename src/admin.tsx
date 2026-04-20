@@ -13,8 +13,29 @@
  */
 
 import type { MessageDescriptor } from "@lingui/core";
-import { msg } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react";
+
+/**
+ * Runtime-only replacement for `@lingui/core/macro`'s `msg` template tag.
+ *
+ * The official `msg` is a Babel-time macro that expands to a `MessageDescriptor`
+ * via `@lingui/babel-plugin-lingui-macro`. EmDash's Vite integration only runs
+ * the Lingui macro transform over `@emdash-cms/admin/src` — not over plugin
+ * source in `node_modules`. So any plugin that ships with `@lingui/core/macro`
+ * imports will fail at runtime with:
+ *   "does not provide an export named 'msg'"
+ *
+ * By providing a local tagged-template helper that produces an equivalent
+ * `{ id, message }` descriptor, this plugin is portable to any EmDash host
+ * without requiring the consumer to configure Babel macros themselves.
+ */
+function msg(strings: TemplateStringsArray, ...values: unknown[]): MessageDescriptor {
+	let out = strings[0] ?? "";
+	for (let i = 0; i < values.length; i++) {
+		out += String(values[i]) + (strings[i + 1] ?? "");
+	}
+	return { id: out, message: out };
+}
 import {
 	FilePlus,
 	Envelope,
