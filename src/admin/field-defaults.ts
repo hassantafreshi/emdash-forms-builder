@@ -342,13 +342,13 @@ export const FIELD_TYPE_REGISTRY: FieldTypeMeta[] = [
 		hasOptions: false,
 		aliases: ["calendar", "date picker"],
 	},
-	{
+/* 	{
 		type: "file",
 		label: "File Upload",
 		category: "basic",
 		hasOptions: false,
 		aliases: ["upload", "attachment"],
-	},
+	}, */
 	{
 		type: "range",
 		label: "Range / Slider",
@@ -371,20 +371,20 @@ export const FIELD_TYPE_REGISTRY: FieldTypeMeta[] = [
 		aliases: ["yes no", "binary choice"],
 	}, */
 	// Payment
-	{
+/* 	{
 		type: "prcfld",
 		label: "Price",
 		category: "payment",
 		hasOptions: false,
 		aliases: ["amount", "cost", "fee"],
-	},
-	{
+	}, */
+/* 	{
 		type: "ttlprc",
 		label: "Total",
 		category: "payment",
 		hasOptions: false,
 		aliases: ["sum", "grand total"],
-	},
+	}, */
 	/* {
 		type: "stripe",
 		label: "Stripe",
@@ -428,13 +428,13 @@ export const FIELD_TYPE_REGISTRY: FieldTypeMeta[] = [
 		hasOptions: true,
 		aliases: ["region", "province"],
 	}, */
-	{
+/* 	{
 		type: "signature",
 		label: "Signature",
 		category: "advanced",
 		hasOptions: false,
 		aliases: ["sign", "e-sign"],
-	},
+	}, */
 	{
 		type: "rating",
 		label: "Star Rating",
@@ -513,7 +513,7 @@ export const FIELD_TYPE_REGISTRY: FieldTypeMeta[] = [
 		aliases: ["separator", "line", "hr"],
 	},
 	// Structural / Layout
-	{
+/* 	{
 		type: "step",
 		label: "Step",
 		category: "structural",
@@ -526,7 +526,7 @@ export const FIELD_TYPE_REGISTRY: FieldTypeMeta[] = [
 		category: "structural",
 		hasOptions: false,
 		aliases: ["fieldset", "section", "container", "panel", "box"],
-	},
+	}, */
 ];
 
 // =============================================================================

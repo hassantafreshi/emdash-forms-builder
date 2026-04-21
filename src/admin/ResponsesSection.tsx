@@ -305,7 +305,7 @@ function ReplyThread({ submissionId, detail }: { submissionId: string; detail: S
 					</div>
 				)}
 				<div
-					className="flex items-end gap-2"
+					className="flex items-end gap-2 mb-2"
 					style={{
 						backgroundColor: "var(--color-kumo-elevated)",
 						borderRadius: "14px",

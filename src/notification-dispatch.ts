@@ -91,12 +91,14 @@ export async function dispatchNotification(
 		return { channel: payload.channel, success: false, error: msg };
 	}
 
+	log.info(`[dispatch] sending ${payload.channel} → ${payload.to} | subject: "${payload.subject}"`);
 	try {
 		await handler(payload);
+		log.info(`[dispatch] ✓ sent ${payload.channel} → ${payload.to}`);
 		return { channel: payload.channel, success: true };
 	} catch (err) {
 		const errMsg = err instanceof Error ? err.message : String(err);
-		log.warn(`Notification dispatch failed [${payload.channel}]: ${errMsg}`);
+		log.warn(`[dispatch] ✗ FAILED ${payload.channel} → ${payload.to} | error: ${errMsg}`);
 		return { channel: payload.channel, success: false, error: errMsg };
 	}
 }
@@ -108,8 +110,21 @@ export async function dispatchNotification(
  * This is the main entry point for sending notifications after form events.
  */
 export function dispatchAll(payloads: NotificationPayload[], opts?: DispatchOptions): void {
-	if (payloads.length === 0) return;
+	const log = opts?.log ?? console;
+	if (payloads.length === 0) {
+		log.info("[dispatch] dispatchAll called with 0 payloads — no emails to send");
+		return;
+	}
+
+	log.info(`[dispatch] dispatchAll: queuing ${payloads.length} notification(s): ${payloads.map(p => `${p.channel}→${p.to}`).join(", ")}`);
 
 	// Fire and forget — use void to suppress unhandled promise warnings
-	void Promise.allSettled(payloads.map((p) => dispatchNotification(p, opts)));
+	void Promise.allSettled(payloads.map((p) => dispatchNotification(p, opts))).then((results) => {
+		const failed = results.filter((r) => r.status === "rejected" || (r.status === "fulfilled" && !r.value.success));
+		if (failed.length > 0) {
+			log.warn(`[dispatch] ${failed.length} notification(s) failed out of ${payloads.length}`);
+		} else {
+			log.info(`[dispatch] all ${payloads.length} notification(s) delivered successfully`);
+		}
+	});
 }

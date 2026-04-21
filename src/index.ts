@@ -562,7 +562,7 @@ export function createPlugin(): ResolvedPlugin {
 	const def: PluginDefinition = {
 		id: "emdash-form-builder",
 		version: "0.1.0",
-		capabilities: ["read:content", "write:content"],
+		capabilities: ["read:content", "write:content", "email:send"],
 		storage: STORAGE,
 		admin: {
 			pages: [{ path: "/", label: "EmForm Builder", icon: "plus-circle" }],
@@ -583,13 +583,13 @@ export function createPlugin(): ResolvedPlugin {
 						},
 					],
 				},
-				{
+				/* {
 					type: "portalEmbed",
 					label: "Support Portal",
 					icon: "globe",
 					description: "Embed the support portal for users to view and track their submissions",
 					fields: [],
-				},
+				}, */
 			],
 		},
 		hooks: undefined,
@@ -797,6 +797,11 @@ export function createPlugin(): ResolvedPlugin {
 					updatedDef.formId = input.formId;
 					if (existing.createdAt) updatedDef.meta.createdAt = existing.createdAt as string;
 					if (existing.createdBy) updatedDef.meta.createdBy = existing.createdBy as string;
+					// Preserve existing publish status — builder always sends "draft" so we
+					// must restore the real status to avoid un-publishing a live form.
+					const existingDef = existing.definition as { meta?: { status?: string } } | undefined;
+					const existingStatus = existingDef?.meta?.status ?? (existing.status as string | undefined) ?? "draft";
+					updatedDef.meta.status = existingStatus as "draft" | "published" | "archived";
 
 					await ctx.storage.forms!.put(input.formId, {
 						...existing,
@@ -906,10 +911,18 @@ export function createPlugin(): ResolvedPlugin {
 					const item = (
 						await ctx.storage.forms!.query({ where: { formId: input.formId }, limit: 1 })
 					).items[0];
-					if (!item) return { error: "NOT_FOUND" };
+					if (!item) {
+						ctx.log.warn("[forms.submit] form not found", { formId: input.formId });
+						return { error: "NOT_FOUND" };
+					}
 					const record = (item as { data: Record<string, unknown> }).data;
 					const formDef = record.definition as FormDefinitionV1;
-					if (formDef.meta.status !== "published") return { error: "FORM_NOT_PUBLISHED" };
+					const effectiveStatus = formDef.meta.status ?? record.status as string;
+					ctx.log.info("[forms.submit] form status check", { formId: input.formId, status: effectiveStatus, recordStatus: record.status });
+					if (effectiveStatus !== "published") {
+						ctx.log.warn("[forms.submit] form not published", { formId: input.formId, status: effectiveStatus });
+						return { error: "FORM_NOT_PUBLISHED", detail: `Form status is '${effectiveStatus}'. Please publish the form first.` };
+					}
 
 					// Build field descriptors for sanitization (skip hidden/disabled)
 					const fieldDescriptors = Object.values(formDef.fields)
@@ -996,6 +1009,8 @@ export function createPlugin(): ResolvedPlugin {
 						}
 					}
 
+					ctx.log.info(`[forms.submit] ctx.email available: ${!!ctx.email} | adminEmail: "${adminEmail}" | userEmail: "${userEmail ?? ""}" | portalUrl: "${portalUrl}"`);
+
 					// Admin notification
 					if (adminEmail && EMAIL_RE.test(adminEmail)) {
 						const { text, html } = buildAdminEmailBody(
@@ -1032,6 +1047,8 @@ export function createPlugin(): ResolvedPlugin {
 							htmlBody: html,
 						});
 					}
+
+					ctx.log.info(`[forms.submit] dispatching ${notifications.length} notification(s): ${notifications.map(n => `${n.channel}→${n.to}`).join(", ") || "none"}`);
 
 					// Fire-and-forget dispatch
 					dispatchAll(notifications, { log: ctx.log });

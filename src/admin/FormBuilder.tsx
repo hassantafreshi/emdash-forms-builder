@@ -1881,8 +1881,15 @@ export function FormBuilder({
 				submitButton: builder.submitButton,
 				afterSubmit: builder.afterSubmit,
 			});
-			if (result.formId && !builder.formId) {
-				builder.setFormId(result.formId);
+			const savedFormId = result.formId;
+			if (savedFormId && !builder.formId) {
+				builder.setFormId(savedFormId);
+			}
+			// Auto-publish after save so forms are immediately embeddable
+			if (savedFormId) {
+				await apiFetch("forms.publish", { formId: savedFormId }).catch(() => {
+					// Non-fatal — form is saved even if publish fails
+				});
 			}
 			builder.actions.markClean();
 			setSaveState("success");
@@ -2311,7 +2318,7 @@ export function FormBuilder({
 								value={paletteSearch}
 								onChange={(e) => setPaletteSearch(e.target.value)}
 								placeholder="Search fields..."
-								className="w-full pl-9 pr-4 py-3 text-xs focus:outline-none focus:ring-2"
+								className="w-full pl-8 pr-4 py-3 text-xs focus:outline-none focus:ring-2"
 								style={{
 									backgroundColor: "var(--color-kumo-tint)",
 									border: "1px solid var(--color-kumo-line)",

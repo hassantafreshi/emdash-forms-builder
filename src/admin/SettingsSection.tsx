@@ -378,10 +378,10 @@ export function SettingsSection() {
 				</div>
 			)}
 
-			{/* ── Section: Plan ── */}
-			<SectionHeader title="Plan" />
+			{/* ── Section: Plan ── TEMPORARILY HIDDEN */}
+			{false && <SectionHeader title="Plan" />}
 
-			<div className="space-y-3 mb-8">
+			{false && <div className="space-y-3 mb-8">
 				<SettingCard>
 					<div className="flex items-start gap-4">
 						<SettingIcon icon={Crown} accentColor="var(--color-kumo-warning, #b45309)" />
@@ -420,12 +420,12 @@ export function SettingsSection() {
 						</div>
 					</div>
 				</SettingCard>
-			</div>
+			</div>}
 
-			{/* ── Section: Form Appearance ── */}
-			<SectionHeader title="Form Appearance" />
+			{/* ── Section: Form Appearance ── TEMPORARILY HIDDEN */}
+			{false && <SectionHeader title="Form Appearance" />}
 
-			<div className="space-y-3 mb-8">
+			{false && <div className="space-y-3 mb-8">
 				{/* Accent Color */}
 				<SettingCard>
 					<div className="flex items-start gap-4">
@@ -685,7 +685,7 @@ export function SettingsSection() {
 						})}
 					</div>
 				</SettingCard>
-			</div>
+			</div>}
 
 			{/* ── Section: Notifications ── */}
 			<SectionHeader title="Notifications" />
@@ -982,10 +982,10 @@ export function SettingsSection() {
 				</SettingCard>
 			</div>
 
-			{/* ── Section: Public Portal ── */}
-			<SectionHeader title="Public Portal" />
+			{/* ── Section: Public Portal ── TEMPORARILY HIDDEN */}
+			{false && <SectionHeader title="Public Portal" />}
 
-			<div className="space-y-3 mb-8">
+			{false && <div className="space-y-3 mb-8">
 				{/* Portal Enable Toggle */}
 				<SettingCard>
 					<div className="flex items-center gap-4">
@@ -1442,7 +1442,7 @@ export function SettingsSection() {
 						</SettingCard>
 					</>
 				)}
-			</div>
+			</div>}
 
 			{/* ── Sticky save bar — only visible when dirty ── */}
 			{(isDirty || saved) && (

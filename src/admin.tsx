@@ -178,7 +178,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-	{ id: "create", label: "EmForm Builder", icon: PlusCircle },
+	{ id: "create", label: "Create Form", icon: PlusCircle },
 	{ id: "forms", label: "My Forms", icon: ClipboardText },
 	{ id: "responses", label: "Responses", icon: ChatCircle },
 	{ id: "settings", label: "Settings", icon: GearSix },
@@ -434,7 +434,7 @@ function TemplatesHeaderContent({
 						value={search}
 						onChange={(e) => onSearchChange(e.target.value)}
 						placeholder={_(msg`Search templates...`)}
-						className="w-72 pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2"
+						className="w-72 pl-8 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2"
 						style={{
 							border: "1px solid var(--color-kumo-line)",
 							backgroundColor: "var(--color-kumo-control)",
@@ -501,7 +501,7 @@ function FormsHeaderContent({
 						value={search}
 						onChange={(e) => onSearchChange(e.target.value)}
 						placeholder="Search forms..."
-						className="w-72 pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2"
+						className="w-72 pl-8 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2"
 						style={{
 							border: "1px solid var(--color-kumo-line)",
 							backgroundColor: "var(--color-kumo-control)",
@@ -564,7 +564,7 @@ function ResponsesHeaderContent({
 						value={search}
 						onChange={(e) => onSearchChange(e.target.value)}
 						placeholder="Search by form name or tracking code..."
-						className="w-80 pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2"
+						className="w-80 pl-8 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2"
 						style={{
 							border: "1px solid var(--color-kumo-line)",
 							backgroundColor: "var(--color-kumo-control)",

@@ -1388,7 +1388,9 @@ const schemaLd = {
 
 					var result = await res.json();
 
-					if (res.ok && result.data) {
+					console.log("[emdash-form] submit response:", JSON.stringify(result));
+
+					if (res.ok && result.data && result.data.success) {
 						var msg = document.createElement("div");
 						msg.className =
 							"emdash-form-embed__message emdash-form-embed__message--success";
@@ -1423,9 +1425,10 @@ const schemaLd = {
 						var msg = document.createElement("div");
 						msg.className =
 							"emdash-form-embed__message emdash-form-embed__message--error";
-						msg.textContent =
-							(result.error && result.error.message) ||
-							"Something went wrong. Please try again.";
+						var errCode = (result.data && result.data.error) || (result.error && result.error.message);
+						msg.textContent = errCode
+							? "Error: " + errCode
+							: "Something went wrong. Please try again.";
 						var actions = form.querySelector(".emdash-form-embed__actions");
 						if (actions) actions.before(msg);
 					}

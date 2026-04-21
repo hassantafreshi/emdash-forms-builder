@@ -89,7 +89,7 @@ export function AfterSubmitPanel({
 			{/* Content */}
 			<div className="flex-1 overflow-y-auto p-4 space-y-5">
 				{/* -- Submission Mode -- */}
-				<SettingSection icon={<ListBullets className="h-4 w-4" />} title="Form Type">
+				{false && <SettingSection icon={<ListBullets className="h-4 w-4" />} title="Form Type">
 					<select
 						value={config.submissionMode}
 						onChange={(e) => onUpdate({ submissionMode: e.target.value as SubmissionMode })}
@@ -109,10 +109,10 @@ export function AfterSubmitPanel({
 					<p className="text-xs mt-1" style={{ color: "var(--text-color-kumo-subtle)" }}>
 						{SUBMISSION_MODES.find((m) => m.value === config.submissionMode)?.description ?? ""}
 					</p>
-				</SettingSection>
+				</SettingSection> }
 
 				{/* -- Show Tracking Code -- */}
-				<SettingSection icon={<Hash className="h-4 w-4" />} title="Display Tracking Code">
+				{false &&<SettingSection icon={<Hash className="h-4 w-4" />} title="Display Tracking Code">
 					<label className="flex items-center gap-3 cursor-pointer">
 						<ToggleSwitch
 							checked={config.showTrackingCode}
@@ -126,7 +126,7 @@ export function AfterSubmitPanel({
 						When enabled, users will see a unique reference number after submitting the form so they
 						can track their submission.
 					</p>
-				</SettingSection>
+				</SettingSection> }
 
 				{/* -- Thank You Mode -- */}
 				<SettingSection
@@ -204,7 +204,7 @@ export function AfterSubmitPanel({
 				</SettingSection>
 
 				{/* -- Preview -- */}
-				<SettingSection icon={<CheckCircle className="h-4 w-4" />} title="Preview">
+				{false &&<SettingSection icon={<CheckCircle className="h-4 w-4" />} title="Preview">
 					<div
 						className="rounded-lg p-4 text-sm"
 						style={{
@@ -229,7 +229,7 @@ export function AfterSubmitPanel({
 							</>
 						)}
 					</div>
-				</SettingSection>
+				</SettingSection> }
 			</div>
 		</div>
 	);
@@ -251,7 +251,7 @@ function SettingSection({
 	return (
 		<div>
 			<div
-				className="flex items-center gap-2 mb-2"
+				className="flex items-center gap-2 mt-3 mb-2"
 				style={{ color: "var(--text-color-kumo-strong)" }}
 			>
 				<span style={{ color: "var(--color-kumo-brand)" }}>{icon}</span>
