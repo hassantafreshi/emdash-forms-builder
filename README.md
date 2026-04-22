@@ -12,37 +12,33 @@ portal — all without leaving your CMS.
 ### Form Builder
 
 - Drag-and-drop field editor with live preview
-- **30+ field types** across six categories:
-  - **Basic** — text, name, email, phone, number, textarea, date, URL, hidden,
+- **24 field types** across six categories:
+  - **Basic** — text, name, email, phone, mobile, number, textarea, date,
     password
-  - **Choice** — select, multiselect, radio, checkbox, yes/no, toggle
+  - **Choice** — select, multiselect, radio, checkbox, yes/no
   - **Survey** — star rating, NPS, 5-point scale
-  - **Advanced** — file upload, signature, location picker, range, colour picker
+  - **Advanced** — file upload, signature, location picker
   - **Commerce** — price, total price
-  - **Structural** — divider, step (multi-page), group
+  - **Structural** — step (multi-page), group
 - Multi-step (wizard) forms with per-step field grouping
 - Per-field conditional logic (show / hide on value match)
 - Global and per-field style overrides (colours, border-radius, fonts …)
 - Submit button customisation (size, variant, colours, loading / success text)
 - Form-level appearance theming (accent colour, background, font size …)
-- Three form layout options: single-column, two-column
+- Two form layout options: single-column, two-column
 - Status lifecycle: **draft → published → archived**
 - One-click **Duplicate** a form
 
 ### Starter Templates
 
-Eight ready-made templates to jump-start common use cases:
+Four ready-made templates to jump-start common use cases:
 
 | Template | Category |
 |---|---|
 | Contact Form | General |
 | Support Ticket | Support |
-| Job Application | HR |
-| Product Feedback | Survey |
-| Event Registration | Events |
-| Payment / Order | Commerce |
-| Quiz | Survey |
-| Newsletter Sign-up | Marketing |
+| Customer Satisfaction | Survey |
+| Blank Form | General |
 
 ### Submissions & Responses
 
@@ -166,7 +162,7 @@ After `pnpm install` and a dev-server restart, the admin sidebar shows
 1. Create and publish a form in the **EmForm Builder** admin section.
 2. Open the EmDash editor and insert the **Form** portable-text block.
 3. Pick the form from the dropdown.
-4. The `FormEmbed` Astro component renders it on your public page.
+4. The `formEmbed` block component (auto-wired via `blockComponents`) renders it on your public page.
 
 ---
 
@@ -209,10 +205,17 @@ Configurable in **EmForm Builder → Settings**:
 | `captchaEnabled` | `false` | Enable CAPTCHA on all public forms |
 | `portalEnabled` | `true` | Make the support portal available |
 | `portalTitle` | `"Support Portal"` | Portal page heading |
+| `portalWelcomeMessage` | `""` | Welcome message shown on the portal login page |
+| `portalDefaultLocale` | `"en"` | Default locale for portal UI |
+| `portalBrandColor` | `""` | Primary brand colour for the portal |
+| `portalLoginDescription` | `""` | Description text on the portal login screen |
 | `portalPagePath` | `""` | Public path of your portal Astro page |
 | `planTier` | `"free"` | `"free"` shows branding footer; `"pro"` removes it |
 | `formAccentColor` | `""` | Global accent colour for embedded forms |
 | `formBgColor` | `""` | Global form background colour |
+| `formTextColor` | `""` | Global form text colour |
+| `formBorderRadius` | `""` | Global border-radius for form inputs |
+| `formFontSize` | `""` | Global base font size for embedded forms |
 | `formButtonStyle` | `"filled"` | Submit button variant: `filled`, `outline`, `ghost` |
 
 ---
